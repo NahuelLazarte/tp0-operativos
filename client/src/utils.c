@@ -16,28 +16,46 @@ void* serializar_paquete(t_paquete* paquete, int bytes)
 	return magic;
 }
 
-int crear_conexion(char *ip, char* puerto)
-{
-	struct addrinfo hints;
-	struct addrinfo *server_info;
+int crear_conexion(char *ip, char* puerto) {
+    struct addrinfo hints;
+    struct addrinfo *server_info;
+    int socket_cliente;
+    int resultado;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_flags = 0; // No AI_PASSIVE, ya que es para el lado del cliente
 
-	getaddrinfo(ip, puerto, &hints, &server_info);
+    resultado = getaddrinfo(ip, puerto, &hints, &server_info);
+    if (resultado != 0) {
+        fprintf(stderr, "Error en getaddrinfo: %s\n", gai_strerror(resultado));
+        return -1;
+    }
 
-	// Ahora vamos a crear el socket.
-	int socket_cliente = 0;
+    // Crear el socket
+    socket_cliente = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
+    if (socket_cliente == -1) {
+        perror("Error al crear el socket");
+        freeaddrinfo(server_info);
+        return -1;
+    }
 
-	// Ahora que tenemos el socket, vamos a conectarlo
+    // Conectar el socket
+    resultado = connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen);
+    if (resultado == -1) {
+        perror("Error al conectar");
+        close(socket_cliente);
+        freeaddrinfo(server_info);
+        return -1;
+    }
 
+    freeaddrinfo(server_info); // Liberar la memoria de server_info
 
-	freeaddrinfo(server_info);
-
-	return socket_cliente;
+    return socket_cliente; // Devolver el descriptor del socket conectado
 }
+
+
 
 void enviar_mensaje(char* mensaje, int socket_cliente)
 {
@@ -53,7 +71,9 @@ void enviar_mensaje(char* mensaje, int socket_cliente)
 
 	void* a_enviar = serializar_paquete(paquete, bytes);
 
-	send(socket_cliente, a_enviar, bytes, 0);
+	if (send(socket_cliente, a_enviar, bytes, 0) == -1) {
+        perror("Error al enviar el mensaje");
+    }
 
 	free(a_enviar);
 	eliminar_paquete(paquete);
